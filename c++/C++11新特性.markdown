@@ -1,0 +1,191 @@
+## C++11新特性
+#### auto和decltype关键字
+##### auto
+- 编程中常常需要把表达式的值交付给变量，需要在声明变量的时候清除的直到变量的类型。这个时候可以使用auto关键字让编译器自动推到表达式的类型。
+
+```c++
+auto item = val1 + val2;//如果val1和val2都是int，则item也是int，如果一个是int，一个是double，则item是double
+```
+
+```c++
+int i = 3;
+auto a = i,&b = i,*c = &i;//正确: a初始化为i的副本,b初始化为i的引用,c为i的指针.
+auto sz = 0, pi = 3.14;//错误,两个变量的类型不一样。
+```
+
+编译器推断出来的auto类型有时候跟初始值的类型并不完全一样：
+
+- 对于引用会推导出原始对象
+
+```c++
+int i = 0, &r = i;
+auto a = r;  // a是int类型
+```
+
+- 忽略顶层const，保留底层const
+
+```c++
+	int i = 0;
+	const int ci = i, &cr = ci;  //ci 为整数常量,cr 为整数常量引用 
+	auto a = ci;     // a 为一个整数int, 顶层const被忽略
+	auto b = cr;     // b 为一个整数int，顶层const被忽略
+	auto c = &ci;    // c 为一个整数指针int *.
+	auto d = &cr;    // d 为一个指向整数常量的指针(对常量对象区地址是那么const会变成底层const)
+```
+如果希望auto保留顶层const，则需要明确指出：`const auto f = ci;`
+
+- 还可以将引用的类型设为auto
+```c++
+auto &g = ci; //g是一个整数常量引用，绑定到ci。
+auto &h = 42; // 错误：非常量引用的初始值必须为左值。
+const auto &j = 42; //正确:常量引用可以绑定到字面值。 
+```
+
+##### decltype
+
+- decltype只是推导表达式的值，并不计算表达式。
+- decltype可以用于后置返回类型
+
+```c++
+decltype(f()) sum = x; //sum的类型就是函数f的返回值，此语句不会调用f函数。 
+```
+
+- 如果decltype使用的表达式是一个变量，则decltype返回该变量的类型（包括顶层const和引用在内）
+
+```c++
+const int ci = 42, &cj = ci;
+ 
+decltype(ci) x = 0;   // x 类型为const int
+auto z = ci;          // z 类型为int
+ 
+decltype(cj) y = x;   // y 类型为const int&
+auto h = cj;          // h 类型为int
+```
+
+- **如果表达式的内容是解引用操作，则decltype将得到引用类型**。
+
+```c++
+int i = 42, *p = &i, &r = i;
+ 
+decltype(i) x1 = 0;       //因为 i 为 int ,所以 x1 为int
+auto x2 = i;              //因为 i 为 int ,所以 x2 为int
+ 
+decltype(r) y1 = i;       //因为 r 为 int& ,所以 y1 为int&
+auto y2 = r;              //因为 r 为 int& ,但auto会忽略引用，所以 y2 为int
+ 
+decltype(r + 0) z1 = 0;   //因为 r + 0 为 int ,所以 z1 为int,
+auto z2 = r + 0;          //因为 r + 0 为 int ,所以 z2 为int,
+ 
+decltype(*p) h1 = i;      //这里 h1 是int&， 原因后面讲
+auto h2 = *p;             // h2 为 int.
+```
+
+- 一层括号和两层括号不同
+
+```c++
+int i = 42;
+ 
+//decltype(i)   int  类型
+//decltype((i)) int& 类型
+```
+
+#### 左值、右值、移动构造函数
+
+- 左值：可以被引用符号&取地址的值（在内存上有实际的物理地址存放变量）。非左值包括**字面常量**和**包含多项**的表达式（但是改表达式应当是返回**值**的，不可以返回引用）。const变量属于不可修改的左值，而不是右值。
+
+- 左值引用: 传统的C++引用，就是左值引用，可以关联到左值，相当于左值的别名。
+
+- 右值：可以出现在赋值表达式右边，到那时不能对其使用取地址符号&取得其地址的值。
+
+- 右值引用：使用&&表示，可以关联到右值
+
+```c++
+int a = 3;
+int&& tr = a++;
+cout<<tr<<endl; // 3;
+int& tl = ++a;
+cout<<tl<<endl; // 5
+int&& ttr = ++a; // error
+int& ttl = a++;  // error;
+const int& tt = a++;  //right
+```
+
+- 移动构造：不删除原来的对象，将其数据保留在原来的位置，将现有对象和该位置关联。类似计算机中移动文件（只是移动了索引路径）
+
+- **右值引用可以减少对中间变量的深拷贝过程**，这里的中间变量可能是函数的临时返回对象。比如下面这段代码，1和2是不一样的，allcaps(vstr)创建和复制了数据空间，并作为临时变量，vstr_copy2调用复制构造函数进行初始化时，通用创建空间复制数据，即执行深拷贝，然后，编译器释放了临时变量。如果使用右值引用，则不需要在vstr_copy2的复制构造函数中进行深拷贝。
+
+```c++
+vector<string> allcaps(const vector<string>& vs)
+{
+	vector<string> temp;
+	return temp;
+}
+
+int main()
+{
+	vector<string> vstr(2000, "aaaa");
+	vector<string> vstr_copy1(vstr);  // 1
+	vector<string> vstr_copy2(allcaps(vstr));  // 2
+}
+```
+
+- 移动构造函数和移动赋值运算符
+
+```c++
+//.h
+Class Useless{
+public:
+	Useless(Useless&& f); // 移动构造函数，非const，参数为右值
+	Useless& operator= (Useless&& f); // 移动赋值运算符
+}
+
+//.cpp
+Useless four(one+two); // one+two为右值
+Useless four=one+two; // one+two为右值
+
+```
+
+```c++
+string(string&& that)   // string&& is an rvalue reference to a string
+{
+	data = that.data;
+	that.data = 0;   // 把原来的对象指针置为空
+}
+```
+
+- unique_ptr中使用右值引用
+
+```C++
+unique_ptr(unique_ptr&& source)   // note the rvalue reference
+{
+    ptr = source.ptr;
+    source.ptr = nullptr;   // 原来的指针指向空
+}
+
+```
+```C++
+unique_ptr<Shape> a(new Triangle);
+unique_ptr<Shape> b(a);                 // error
+unique_ptr<Shape> c(make_triangle());       // okay
+
+unique_ptr<Shape> a(new Triangle);
+unique_ptr<Shape> b(a);              // still an error
+unique_ptr<Shape> c(std::move(a));   // okay
+```
+
+&nbsp;
+
+### 参考
+
+
+
+https://blog.csdn.net/jiange_zh/article/details/79356417
+
+https://blog.csdn.net/qq_33726635/article/details/104782331
+
+
+
+
+
+
+
